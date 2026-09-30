@@ -1,0 +1,601 @@
+# PAWCARE — Veterinary Clinic & Pet Health Management System
+
+**Complete Pet Health & Clinic Management**
+
+A desktop application for a veterinary clinic, written in Java 17 with Swing. It keeps the
+patient register, the client list, the appointment diary, the clinical history and the
+vaccination card, and turns all of it into a live dashboard, a searchable record system and
+a set of reports.
+
+This is a **B.Tech CSE — Semester III Java Programming** project. It deliberately uses only
+the Java standard library, so every concept it demonstrates can be explained from first
+principles in a viva.
+
+---
+
+## Table of Contents
+
+1. [Project Overview](#1-project-overview)
+2. [Problem Statement](#2-problem-statement)
+3. [Objectives](#3-objectives)
+4. [Features](#4-features)
+5. [Technologies Used](#5-technologies-used)
+6. [Architecture](#6-architecture)
+7. [Project Structure](#7-project-structure)
+8. [Java Concepts and Where They Are Used](#8-java-concepts-and-where-they-are-used)
+9. [Installation](#9-installation)
+10. [Requirements](#10-requirements)
+11. [Running the Application](#11-running-the-application)
+12. [Testing](#12-testing)
+13. [Screenshots](#13-screenshots)
+14. [Future Enhancements](#14-future-enhancements)
+
+---
+
+## 1. Project Overview
+
+PAWCARE is a single-user desktop application for a veterinary clinic. It replaces the
+paper register, the appointment diary and the vaccination card with one program that keeps
+everything consistent: when a patient is deleted, every appointment, treatment and
+vaccination belonging to that patient goes with it; when a vaccination falls due, the
+dashboard says so; when an appointment is double-booked, the program refuses to save it.
+
+Data lives in six files inside a `data/` folder, written with Java object serialization.
+There is no database, no server and no network access — the whole system is one Java
+process and a folder of files, which is exactly what makes it explainable in a viva.
+
+The interface is a modern desktop dashboard: a navigation rail on the left, a page header
+with the clinic name and the current date, stat cards, rounded panels, clean tables with
+sortable columns, status badges, search bars, empty states, confirmation dialogs and toast
+messages. A light/dark theme can be switched at runtime and is remembered between runs.
+
+---
+
+## 2. Problem Statement
+
+A small veterinary clinic keeps its records on paper. That causes five concrete problems:
+
+1. **Records get lost.** A pet's vaccination card is a physical card. If the owner forgets
+   it, the clinic cannot tell whether a booster is due — so animals are either vaccinated
+   late or vaccinated twice.
+2. **Nothing is linked.** The appointment diary does not know about the patient register,
+   so an appointment can be written for a pet that is not registered, or two owners can be
+   given the same slot with the same doctor.
+3. **A patient's history is scattered.** Details of previous treatments live in different
+   files, so a vet cannot quickly see what a pet was treated for last year.
+4. **Nobody knows what needs attention today.** Working out which vaccinations have fallen
+   due means reading every card by hand.
+5. **There are no reports.** The clinic cannot answer questions like "how many dogs do we
+   treat?" or "which client brings in the most animals?" without counting by hand.
+
+PAWCARE solves all five by keeping the data in linked in-memory collections, applying
+validation rules before anything is saved, computing the reminders automatically, and
+rebuilding the reports from live data.
+
+---
+
+## 3. Objectives
+
+| # | Objective |
+|---|-----------|
+| 1 | Provide a single register for patients, clients, staff, appointments, treatments and vaccinations. |
+| 2 | Enforce the clinic's business rules before a record is saved, and report *every* problem at once. |
+| 3 | Link records so that deleting a patient cannot leave orphan appointments or treatments behind. |
+| 4 | Classify every vaccination as **overdue**, **due soon** or **upcoming**, and show what needs action today. |
+| 5 | Compute every dashboard and report figure from live data — never a hard-coded number. |
+| 6 | Persist everything to disk and restore it on the next run, recovering gracefully from a damaged file. |
+| 7 | Demonstrate the core Java syllabus — OOP, the collections framework, exceptions, date/time, files, GUI and testing — in one working program. |
+
+---
+
+## 4. Features
+
+### Patients (Pets)
+
+* Register a **Dog**, **Cat** or **Bird** — three concrete subclasses of an abstract
+  `Animal`, each with its own extra attribute (training level, indoor/outdoor lifestyle,
+  wing span).
+* Full **create, read, update and delete**.
+* Each patient carries a medical record: allergies, chronic conditions and notes.
+* A patient profile shows the owner, the medical notes, the appointment history, the
+  treatment history and the vaccination card.
+* A species-specific **clinical plan** is generated by `animal.treatmentPlan()` — resolved
+  at runtime by which subclass the object really is.
+* A derived **health status** per patient (`Overdue`, `Due soon`, `Up to date`,
+  `No records`) computed from that patient's vaccinations.
+* Search, filter by species, filter by owner, and sort by any column.
+
+### Clients (Owners)
+
+* Full **create, read, update and delete**.
+* Name, phone, email, address and an optional emergency contact, all validated.
+* An owner who still has registered patients **cannot** be deleted; the error names the
+  patients that are in the way.
+* An owner profile lists every patient registered to them.
+
+### Staff (Veterinarians)
+
+* Four veterinarians ship with the demo data, each with a specialisation.
+* Used as the "who is seeing this patient" picker throughout the program.
+
+### Appointments
+
+* Full **create, read, update and delete**.
+* Lifecycle states: `Scheduled`, `Completed`, `Cancelled`.
+* **Double-booking detection:** the same veterinarian cannot be given two active
+  appointments at the same date and time. A cancelled slot is free again.
+* A scheduled visit cannot be dated in the past — but historical completed and cancelled
+  visits can still be edited.
+* The diary is a `TreeMap<LocalDate, ArrayList<Appointment>>`, so it is always in date
+  order without an explicit sort.
+* One-click **Complete** and **Cancel** row actions.
+
+### Treatments
+
+* Create, read and delete clinical entries: date, diagnosis, treatment, medication, notes.
+* Each patient's history is a `LinkedList<Treatment>` and is always displayed in
+  chronological order.
+* Recent treatments appear on the dashboard and the reports page.
+
+### Vaccinations
+
+* Create, read, update and delete.
+* Vaccine name, date given and next due date, with the rule that the next dose cannot
+  precede the dose that was given.
+* Automatic classification:
+  * **Overdue** — the next dose was due before today.
+  * **Due Soon** — today ≤ next due date ≤ today + the reminder window.
+  * **Upcoming** — further away than the window.
+* The reminder window is configurable (**7 – 90 days**) on the Settings page, and changing
+  it instantly reclassifies every existing record.
+* A **Reviewed** flag lets the clinic acknowledge a reminder without deleting it.
+
+### Dashboard
+
+Every figure is computed at the moment the page is drawn:
+
+* Total patients, owners, veterinarians, appointments, treatments and vaccinations.
+* **Today's appointments**, with the patient, the owner, the veterinarian and the time.
+* **Vaccination alerts** — overdue and due-soon doses, most urgent first.
+* **Recent treatments**, newest first.
+* **Species distribution** as a donut chart, and appointment and vaccination breakdowns as
+  bar charts.
+* A clinic status line such as "3 pets have overdue vaccinations".
+
+### Search
+
+* One search box with a scope selector: **All fields**, Pet name, Pet ID, Owner name,
+  Species or Breed.
+* Case-insensitive partial matching, so `bru` finds *Bruno*.
+* An owner search that matches name, id, phone or email.
+
+### Reports
+
+* Register and activity totals.
+* Species distribution, appointment status and vaccination status breakdowns.
+* Top clients by number of registered patients.
+* Vaccination alerts and upcoming appointments.
+
+### Settings
+
+* **Light / dark theme**, applied immediately and persisted.
+* **Clinic name**, shown in the header of every page.
+* **Vaccination reminder window** in days.
+* **Storage** summary — where the data lives, how many records are held, save-now and
+  open-folder actions.
+* **Reset demo data**, behind a confirmation dialog.
+
+### Persistence and recovery
+
+* Six files in `data/`: `pets.dat`, `owners.dat`, `appointments.dat`, `treatments.dat`,
+  `vaccinations.dat`, `veterinarians.dat`.
+* Every change is written to disk as it happens, so closing the window never loses work.
+* Writes go to a temporary file first and are then moved into place, so a crash midway
+  leaves the previous good file intact.
+* A **missing** file simply means "no records yet" — the demo clinic is seeded on a first run.
+* A **corrupt** file is moved aside as `<name>.corrupt-<timestamp>`, reported to the user in
+  a dialog, and the program still starts.
+
+---
+
+## 5. Technologies Used
+
+| Technology | Version | Used for |
+|------------|---------|----------|
+| Java (JDK) | 17 or newer | Language and standard library |
+| Java Swing | JDK built-in | The entire graphical interface |
+| Java2D | JDK built-in | Custom-painted cards, buttons, charts, badges and icons |
+| Collections Framework | JDK built-in | `ArrayList`, `LinkedList`, `HashMap`, `TreeMap`, `EnumMap`, `TreeSet` |
+| `java.time` | JDK built-in | `LocalDate`, `LocalTime`, `LocalDateTime` |
+| Java Serialization | JDK built-in | Saving and loading the `data/*.dat` files |
+| Maven | 3.6 or newer | Build, dependency and test runner |
+| JUnit 5 (Jupiter) | 5.10.2 | The unit test suite |
+
+**Deliberately not used:** Spring, Spring Boot, JavaFX, any database (MySQL, PostgreSQL,
+MongoDB), any web front end (React, Angular, Node.js), Python, Docker, Kubernetes, Gradle,
+REST APIs, JWT or any other authentication framework, ORM or repository framework, and
+complex dependency injection. The program has **no network access at all**: it never sends
+an e-mail or an SMS. Reminders are shown on screen only.
+
+---
+
+## 6. Architecture
+
+The program is layered. Each layer only talks to the one below it, so a change in one place
+does not ripple through the others.
+
+```
+┌───────────────────────────────────────────────────────────────────┐
+│  PRESENTATION            com.pawcare.gui                          │
+│                                                                   │
+│   MainFrame ── Sidebar (navigation)                               │
+│      │                                                            │
+│      ├── pages/      Dashboard Pets Owners Appointments           │
+│      │               Treatments Vaccinations Search Reports       │
+│      │               Settings                                     │
+│      ├── components/ Card StatCard StatusBadge ModernButton       │
+│      ├──             ModernTable SearchField EmptyStatePanel …    │
+│      └── dialogs/    Dialogs PetDialog OwnerDialog …              │
+└──────────────────────────────┬────────────────────────────────────┘
+                               │ calls
+┌──────────────────────────────▼────────────────────────────────────┐
+│  SERVICE                 com.pawcare.service                      │
+│                                                                   │
+│   ClinicService  ← the single entry point the GUI talks to        │
+│      ├── PetService            ArrayList + HashMap                │
+│      ├── OwnerService          ArrayList + HashMap                │
+│      ├── VeterinarianService   ArrayList + HashMap                │
+│      ├── AppointmentService    TreeMap<LocalDate, ArrayList>      │
+│      ├── TreatmentService      HashMap<String, LinkedList>        │
+│      ├── VaccinationService    ArrayList + two indexes            │
+│      ├── SearchService         composed over pets + owners        │
+│      └── ReportService         read-only calculations             │
+└──────────────────────────────┬────────────────────────────────────┘
+                               │ saves / loads
+┌──────────────────────────────▼────────────────────────────────────┐
+│  PERSISTENCE             com.pawcare.repository                   │
+│                                                                   │
+│   DataStore    six .dat files, atomic writes, quarantine          │
+│   SampleData   the demo clinic seeded on a first run              │
+└──────────────────────────────┬────────────────────────────────────┘
+                               │ serializes
+┌──────────────────────────────▼────────────────────────────────────┐
+│  MODEL                   com.pawcare.model                        │
+│                                                                   │
+│   Animal (abstract) → Pet (abstract) → Dog / Cat / Bird           │
+│   Owner  Veterinarian  Appointment  Treatment  Vaccination        │
+│   MedicalInfo   ·   enums: Species Gender AppointmentStatus       │
+│                   VaccinationStatus PetHealthStatus …             │
+└───────────────────────────────────────────────────────────────────┘
+
+Cross-cutting:  theme/ (Theme, Colors, Palette, IconFactory, ThemeManager)
+                util/  (ValidationUtil, IDGenerator, DateUtil, AppSettings)
+                exception/ (PawCareException and its six subclasses)
+```
+
+**Why this shape?**
+
+* The **model** classes know nothing about the interface or about files. They are plain
+  data with behaviour attached, which is what makes them easy to test.
+* The **service** layer owns the collections and every business rule. It is the only place
+  that decides whether something is valid and whether it may be saved.
+* The **repository** layer knows about files and nothing else.
+* The **GUI** never touches a file and never re-implements a rule; it asks a service.
+* `ClinicService` exists so that a page depends on **one** object rather than on eight, and
+  so that writing a change to disk happens in exactly one place.
+
+---
+
+## 7. Project Structure
+
+```
+Paw_Care/
+├── pom.xml                          Maven build file
+├── README.md                        this document
+├── VIVA.md                          viva questions with short answers
+├── data/                            created automatically on the first run
+│   ├── pets.dat
+│   ├── owners.dat
+│   ├── appointments.dat
+│   ├── treatments.dat
+│   ├── vaccinations.dat
+│   ├── veterinarians.dat
+│   └── settings.properties
+└── src/
+    ├── main/java/com/pawcare/
+    │   ├── Main.java                        entry point
+    │   │
+    │   ├── model/                           data + behaviour, no I/O
+    │   │   ├── Animal.java                  abstract superclass
+    │   │   ├── Pet.java                     abstract: an owned animal
+    │   │   ├── Dog.java  Cat.java  Bird.java    the three concrete species
+    │   │   ├── Owner.java  Veterinarian.java
+    │   │   ├── Appointment.java  Treatment.java  Vaccination.java
+    │   │   ├── MedicalInfo.java
+    │   │   └── enums/
+    │   │       ├── Species.java  Gender.java
+    │   │       ├── TrainingLevel.java  IndoorOutdoor.java
+    │   │       ├── AppointmentStatus.java  VaccinationStatus.java
+    │   │       └── PetHealthStatus.java
+    │   │
+    │   ├── service/                         business rules and collections
+    │   │   ├── ClinicService.java           the façade the GUI uses
+    │   │   ├── PetService.java  OwnerService.java
+    │   │   ├── VeterinarianService.java  AppointmentService.java
+    │   │   ├── TreatmentService.java  VaccinationService.java
+    │   │   ├── SearchService.java  ReportService.java
+    │   │
+    │   ├── repository/                      reading and writing files
+    │   │   ├── DataStore.java
+    │   │   └── SampleData.java
+    │   │
+    │   ├── exception/                       checked errors
+    │   │   ├── PawCareException.java        base class, carries a list of details
+    │   │   ├── InvalidPetException.java  InvalidOwnerException.java
+    │   │   ├── InvalidAppointmentException.java
+    │   │   ├── InvalidTreatmentException.java
+    │   │   ├── InvalidVaccinationException.java
+    │   │   ├── EntityNotFoundException.java
+    │   │   └── DataAccessException.java
+    │   │
+    │   ├── util/
+    │   │   ├── ValidationUtil.java          every business rule, in one place
+    │   │   ├── IDGenerator.java             P001, O001, V001, A001, T001, VAC001
+    │   │   ├── DateUtil.java                formatting, parsing, relative labels
+    │   │   └── AppSettings.java             theme, clinic name, reminder window
+    │   │
+    │   ├── theme/                           the centralised look
+    │   │   ├── Theme.java                   colours, fonts, spacing  ← single source
+    │   │   ├── Colors.java  Palette.java    the two palettes
+    │   │   ├── IconFactory.java             vector icons, drawn in code
+    │   │   └── ThemeManager.java            light/dark switching + persistence
+    │   │
+    │   └── gui/
+    │       ├── MainFrame.java               the window
+    │       ├── Sidebar.java                 the navigation rail
+    │       ├── Page.java                    base class for every screen
+    │       ├── pages/                       Dashboard Pets Owners Appointments
+    │       │                                Treatments Vaccinations Search
+    │       │                                Reports Settings
+    │       ├── components/                  Card StatCard StatusBadge ModernButton
+    │       │                                ModernTable ModernTextField
+    │       │                                ModernComboBox ModernTextArea
+    │       │                                SearchField SectionHeader FormPanel
+    │       │                                PageHeader EmptyStatePanel ListCard
+    │       │                                DonutChartPanel BarChartPanel
+    │       │                                EntityTableModel Column ActionColumn
+    │       │                                Badges BadgeRenderer DateRenderer
+    │       │                                ComboRenderers RoundedPanel
+    │       │                                ScrollPanes Toast
+    │       └── dialogs/                     Dialogs MessageDialog FormDialog
+    │                                        PetDialog OwnerDialog
+    │                                        AppointmentDialog TreatmentDialog
+    │                                        VaccinationDialog PetDetailsDialog
+    │                                        OwnerDetailsDialog AboutDialog
+    └── test/java/com/pawcare/
+        ├── support/TestData.java            builders that produce valid records
+        ├── util/ValidationUtilTest.java
+        ├── util/IDGeneratorTest.java
+        ├── util/DateUtilTest.java
+        ├── model/AnimalPolymorphismTest.java
+        ├── model/enums/VaccinationStatusTest.java
+        ├── repository/DataStoreTest.java
+        └── service/PetServiceTest.java  OwnerServiceTest.java
+                 AppointmentServiceTest.java  TreatmentServiceTest.java
+                 VaccinationServiceTest.java  SearchServiceTest.java
+                 ClinicServiceTest.java
+```
+
+---
+
+## 8. Java Concepts and Where They Are Used
+
+| Concept | Where it is used |
+|---------|------------------|
+| **Class and object** | Every model class; `Owner owner = new Owner(...)` |
+| **Encapsulation** | All model fields are `private` with public getters and setters — `Animal`, `Owner`, `Appointment` |
+| **Abstraction** | `Animal` and `Pet` are abstract; you cannot write `new Animal()` |
+| **Inheritance** | `Dog`, `Cat`, `Bird` → `Pet` → `Animal` (a three-level hierarchy) |
+| **Runtime polymorphism** | `Animal.treatmentPlan()` is abstract; the GUI calls `animal.treatmentPlan()` and the JVM picks the subclass version |
+| **Method overriding** | `Pet.displayInfo()` calls `super.displayInfo()` and appends the owner |
+| **Abstract method** | `Animal.getSpecies()`, `Animal.treatmentPlan()`, `Pet.speciesDetail()` |
+| **`super` keyword** | `Pet`'s constructor calls `super(...)`; `Pet.displayInfo()` calls `super.displayInfo()` |
+| **`this` keyword** | Constructors such as `Owner(String ownerId, ...)` assign `this.ownerId = ownerId` |
+| **Interface** | `java.io.Serializable` on every model class; `javax.swing.Scrollable` on `Page.ScrollableBody` |
+| **Static members** | `ValidationUtil.validatePet(...)`, `IDGenerator.nextPetId()`, `Theme.SPACE_MD` |
+| **Final class / method** | `ValidationUtil`, `IDGenerator`, `DateUtil`, `SampleData` are `final` utilities with private constructors |
+| **`instanceof`** | `MainFrame.buildUi()` and the table renderers; `Animal.equals` |
+| **`equals` and `hashCode`** | Overridden in `Animal`, `Owner`, `Appointment`, `Treatment`, `Vaccination` — identity is the record id |
+| **`toString`** | `Animal.toString()` returns `displayInfo()`; `Enum` labels |
+| **Enum** | `Species`, `Gender`, `AppointmentStatus`, `VaccinationStatus`, `PetHealthStatus`, `TrainingLevel`, `IndoorOutdoor` |
+| **Enum with fields and methods** | `VaccinationStatus.of(nextDue, today, window)` holds the reminder rule; `AppointmentStatus.getLabel()` |
+| **`values()` and `valueOf`** | `Species.values()` drives the species chart; `fromLabel(...)` on the status enums |
+| **ArrayList** | `PetService.pets`, `OwnerService.owners`, `VaccinationService.vaccinations` |
+| **LinkedList** | `TreatmentService` — one `LinkedList<Treatment>` per patient |
+| **HashMap** | `PetService.petById` gives **O(1)** `findPetById`; `OwnerService.ownerById`; `TreatmentService.byId` |
+| **TreeMap** | `AppointmentService.byDate` — `TreeMap<LocalDate, ArrayList<Appointment>>`, always date-ordered |
+| **EnumMap** | `countBySpecies()`, `countByStatus()` — a map keyed by an enum |
+| **TreeSet** | `SettingsPage.reminderOptions()` merges the standard choices with the stored value |
+| **`Map.Entry` / `entrySet`** | `AppointmentService.getAll()` walks the TreeMap; `ReportService.topOwnersByPetCount` |
+| **`computeIfAbsent`** | Building the per-patient lists and maps in `TreatmentService`, `VaccinationService` |
+| **`merge`** | Counting per key in `countByStatus()`, `countBySpecies()` |
+| **Generics** | `Optional<Pet>`, `Map<Species, Integer>`, `Comparator<Treatment>`, `ModernComboBox<E>` |
+| **`Comparator`** | `Treatment.BY_DATE`, `Vaccination.BY_NEXT_DUE`, `AppointmentService.BY_DATE_THEN_TIME`, `PetService.sortedBy(...)` |
+| **`Comparable`** | `Treatment implements Comparable<Treatment>`; `compareTo` delegates to the comparator |
+| **`Collections.sort`** | `PetService.sortedByName()`, `ReportService.topOwnersByPetCount()` |
+| **`List.sort`** | `PetService.sortedBy(...)`, `AppointmentService.sort(...)` |
+| **Lambda expressions** | Listeners (`e -> refresh()`), comparators, `Comparator.comparing(Pet::getName)` |
+| **Method references** | `Pet::getName`, `Appointment::getAppointmentDate`, `store::loadPets` |
+| **Functional interface** | `ClinicService.Loader<T>` (`@FunctionalInterface`), `Runnable`, `Consumer<String>` in `Sidebar` |
+| **Streams** | `SearchService.search(...)`, `VaccinationService.alerts()`, `ReportService.visitsThisWeek()` |
+| **Optional** | `PetService.findPetById` returns `Optional<Pet>` instead of `null` |
+| **Varargs** | `Main.main(String... args)`; `Page.row(Component...)`, `SettingsPage.buttonRow(JComponent...)` |
+| **Checked exceptions** | `PawCareException` and its subclasses `extends Exception`, so the compiler forces handling |
+| **Custom exception hierarchy** | `InvalidPetException extends PawCareException`; one base class carries a `List<String> details` |
+| **Multiple errors in one exception** | `ValidationUtil` collects every problem, then throws once — the dialog shows a bullet list |
+| **`try`-with-resources** | `DataStore.save` / `load` close streams automatically |
+| **`finally`-free cleanup** | Guaranteed by try-with-resources in every file operation |
+| **Specific `catch` clauses** | `catch (IOException \| ClassNotFoundException e)`; no bare `catch (Exception e)` anywhere |
+| **Exception chaining** | `throw new DataAccessException("Could not save …", e)` keeps the original cause |
+| **`LocalDate` / `LocalTime`** | Appointment dates and times, registration dates, vaccination dates |
+| **`LocalDateTime`** | The quarantine file name stamp in `DataStore` |
+| **`DateTimeFormatter`** | `DateUtil` prints `30 Sep 2026` and `10:30 AM`; parses five accepted spellings |
+| **`ChronoUnit.DAYS.between`** | `VaccinationStatus.of(...)` and `DateUtil.daysFromToday(...)` |
+| **Immutable date arithmetic** | `today.plusDays(30)`, `today.minusYears(1)` — a new object each time |
+| **Java Serialization** | `ObjectOutputStream` / `ObjectInputStream` in `DataStore`; `serialVersionUID` on every model |
+| **File I/O (`java.nio.file`)** | `Files.createDirectories`, `Files.move` with `ATOMIC_MOVE`, `Files.deleteIfExists` |
+| **`Properties` file** | `AppSettings` stores the theme, the clinic name and the reminder window |
+| **`Path` vs `File`** | `DataStore` uses the modern `java.nio.file.Path` throughout |
+| **Swing containers** | `JFrame`, `JPanel`, `JScrollPane`, `JDialog` |
+| **Layout managers** | `BorderLayout`, `BoxLayout`, `CardLayout`, `GridLayout`, `GridBagLayout`, `FlowLayout` |
+| **`CardLayout`** | `MainFrame` swaps between the nine pages |
+| **`BoxLayout` + `setMaximumSize`** | The vertical stacking used by every page (`Page.stack`) |
+| **Event handling** | `ActionListener`, `MouseAdapter`, `DocumentListener`, `WindowAdapter` |
+| **Anonymous inner classes** | `MainFrame`'s `WindowAdapter` for the close button |
+| **Custom painting (Java2D)** | `ModernButton`, `Card`, `StatCard`, `StatusBadge`, `DonutChartPanel`, `BarChartPanel`, `IconFactory` |
+| **`Graphics2D` + antialiasing** | Every custom-painted component calls `setRenderingHint(KEY_ANTIALIASING, …)` |
+| **`JTable` + `AbstractTableModel`** | `EntityTableModel`, `ModernTable`, per-column renderers |
+| **`TableRowSorter`** | Sortable column headers with per-column comparators |
+| **`UIManager`** | `ThemeManager.applyUiDefaults()` restyles scrollbars, tables and tooltips |
+| **`SwingUtilities.invokeLater`** | `Main.main` builds the whole interface on the event dispatch thread |
+| **`Desktop` API** | `SettingsPage` opens the data folder in the file browser |
+| **JUnit 5** | 13 test classes under `src/test/java` |
+| **`@Test`, `@BeforeEach`, `@Nested`, `@DisplayName`** | Every test class; `ValidationUtilTest` groups one entity per nested class |
+| **`@TempDir`** | `DataStoreTest` and `ClinicServiceTest` get scratch folders that are deleted afterwards |
+| **Assertions** | `assertEquals`, `assertThrows`, `assertTrue`, `assertSame`, `assertInstanceOf` |
+| **Dependency-free design** | `pom.xml` has exactly one dependency, and it is `test`-scoped |
+
+---
+
+## 9. Installation
+
+```bash
+# 1. Get the project
+cd /path/to/Paw_Care
+
+# 2. Check that Java 17 or newer is installed
+java -version
+
+# 3. Build it (this also downloads JUnit, the only dependency)
+mvn clean package
+```
+
+Maven puts the runnable jar at `target/pawcare.jar`. Nothing else has to be installed — no
+database, no server, no driver.
+
+## 10. Requirements
+
+| | |
+|---|---|
+| **Operating system** | Windows, macOS or Linux — the interface is drawn entirely in Java |
+| **JDK** | Java 17 or newer (`maven.compiler.release` is 17) |
+| **Maven** | 3.6 or newer |
+| **Disk space** | Under 5 MB for the project; the data folder grows by a few kilobytes per record |
+| **Memory** | 256 MB is ample |
+| **Display** | A graphical desktop — this is a Swing application, so it needs a screen |
+| **Network** | Not required, and never used |
+
+## 11. Running the Application
+
+```bash
+# From the project folder, after building:
+java -jar target/pawcare.jar
+```
+
+During development it is often quicker to skip the packaging step:
+
+```bash
+mvn compile
+mvn exec:java -Dexec.mainClass=com.pawcare.Main
+```
+
+or, without the exec plugin:
+
+```bash
+mvn -q compile
+java -cp target/classes com.pawcare.Main
+```
+
+On the **first run** the program creates the `data/` folder, writes
+`data/settings.properties`, and seeds the demo clinic: 5 clients, 4 veterinarians,
+8 patients, 8 appointments, 10 treatments and 10 vaccinations. On every later run it loads
+what is on disk and seeds nothing.
+
+To start again from a clean clinic, delete the `data/` folder (**File → Settings → Reset
+demo data** does the same thing without leaving the program).
+
+## 12. Testing
+
+```bash
+mvn test
+```
+
+The suite is written with **JUnit 5** and covers the parts a demonstration is most likely
+to be questioned on:
+
+| Test class | What it proves |
+|------------|----------------|
+| `util/ValidationUtilTest` | Every validation rule for pets, owners, appointments, vaccinations and treatments, including that all problems are reported in one exception |
+| `util/IDGeneratorTest` | Ids follow `P001` / `VAC001`, counters are independent, and `sync` never reissues an id that is already stored |
+| `util/DateUtilTest` | Formatting, every accepted date and time spelling, rejection of nonsense, and the relative labels |
+| `model/AnimalPolymorphismTest` | The three species return three different treatment plans through an `Animal` reference; overriding, equality and ordering |
+| `model/enums/VaccinationStatusTest` | The overdue / due-soon / upcoming boundaries at exactly today, +30 and +31 days |
+| `repository/DataStoreTest` | Round trips for all six entity types, atomic writes, missing files, corrupt files and quarantine |
+| `service/PetServiceTest` | CRUD, the `HashMap` O(1) lookup, species census, sorting and defensive copies |
+| `service/OwnerServiceTest` | CRUD, searching, sorting and id-index consistency |
+| `service/AppointmentServiceTest` | `TreeMap` date ordering, same-day time ordering, double-booking detection, status transitions and the cascade delete |
+| `service/TreatmentServiceTest` | Per-patient `LinkedList` histories, chronological ordering, removal and bulk loading |
+| `service/VaccinationServiceTest` | Grouping by patient, worst-state-wins health status, alerts, and reclassification when the reminder window changes |
+| `service/SearchServiceTest` | That each search scope looks only at its own field, and case-insensitive partial matching |
+| `service/ClinicServiceTest` | First-run seeding, persistence across a restart, cascading deletes, the reset, and recovery from a damaged file |
+
+To build the jar **without** running the tests:
+
+```bash
+mvn clean package -DskipTests
+```
+
+## 13. Screenshots
+
+Run the program and take these five screenshots for the report. Each one is chosen to show
+something the examiner is likely to ask about.
+
+| # | Screen | What to capture | The point it makes |
+|---|--------|-----------------|--------------------|
+| 1 | **Dashboard** | The stat cards, today's appointments, the species donut and the vaccination alerts | Every number is live, and the reminder rules are visibly working |
+| 2 | **Pets** | The patient table with species badges and health-status badges, with the species filter open | Polymorphism in the model, derived status in the finder column |
+| 3 | **Add / Edit Pet** | The dialog with a species selector and the validation error dialog that appears when a field is wrong | Validation rules and the "every problem at once" error dialog |
+| 4 | **Vaccinations** | The alert list showing an overdue, a due-soon and an upcoming record | The three reminder states side by side |
+| 5 | **Settings** | The reminder window, then the same vaccination list after changing it from 30 to 90 days | One preference reclassifies the whole clinic |
+
+Two more that are worth having ready:
+
+| # | Screen | The point it makes |
+|---|--------|--------------------|
+| 6 | **Search** | Scoped search — the same query against two different scopes |
+| 7 | **Dark theme** | The whole interface rebuilding from the centralised `Theme` |
+
+## 14. Future Enhancements
+
+Ideas that would fit the existing design without changing its shape:
+
+1. **A printing / PDF export** of a patient's vaccination card, using the same report data.
+2. **Billing and invoicing**, adding an `Invoice` model and a `BillingService` beside the
+   existing services — the persistence layer already stores any `Serializable` list.
+3. **An on-screen reminder panel that opens at start-up**, listing today's overdue doses
+   before the user navigates anywhere.
+4. **Weight and age charts per patient**, storing a history of measurements instead of a
+   single value.
+5. **Automatic age calculation** from a date of birth, replacing the manually entered age.
+6. **A staff rota**, giving each veterinarian working hours so appointments can be blocked
+   outside them.
+7. **CSV import and export**, so a clinic can move its existing register into PawCare.
+8. **Multiple clinics**, by making the data folder selectable at start-up.
+9. **An audit trail**, recording who changed which record and when.
+10. **A searchable help screen** built from the same `VIVA.md` notes.
+
+---
+
+**Project:** PAWCARE — Veterinary Clinic & Pet Health Management System
+**Version:** 1.0
+**Built with:** Java 17 · Swing · Collections · Serialization · JUnit 5 · Maven

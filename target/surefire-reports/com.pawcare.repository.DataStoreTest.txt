@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: com.pawcare.repository.DataStoreTest
+-------------------------------------------------------------------------------
+Tests run: 20, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.298 s -- in com.pawcare.repository.DataStoreTest

@@ -1,0 +1,14 @@
+/Users/shlokkadam/Paw_Care/src/test/java/com/pawcare/model/AnimalPolymorphismTest.java
+/Users/shlokkadam/Paw_Care/src/test/java/com/pawcare/model/enums/VaccinationStatusTest.java
+/Users/shlokkadam/Paw_Care/src/test/java/com/pawcare/repository/DataStoreTest.java
+/Users/shlokkadam/Paw_Care/src/test/java/com/pawcare/service/AppointmentServiceTest.java
+/Users/shlokkadam/Paw_Care/src/test/java/com/pawcare/service/ClinicServiceTest.java
+/Users/shlokkadam/Paw_Care/src/test/java/com/pawcare/service/OwnerServiceTest.java
+/Users/shlokkadam/Paw_Care/src/test/java/com/pawcare/service/PetServiceTest.java
+/Users/shlokkadam/Paw_Care/src/test/java/com/pawcare/service/SearchServiceTest.java
+/Users/shlokkadam/Paw_Care/src/test/java/com/pawcare/service/TreatmentServiceTest.java
+/Users/shlokkadam/Paw_Care/src/test/java/com/pawcare/service/VaccinationServiceTest.java
+/Users/shlokkadam/Paw_Care/src/test/java/com/pawcare/support/TestData.java
+/Users/shlokkadam/Paw_Care/src/test/java/com/pawcare/util/DateUtilTest.java
+/Users/shlokkadam/Paw_Care/src/test/java/com/pawcare/util/IDGeneratorTest.java
+/Users/shlokkadam/Paw_Care/src/test/java/com/pawcare/util/ValidationUtilTest.java
